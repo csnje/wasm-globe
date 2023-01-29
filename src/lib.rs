@@ -6,7 +6,7 @@ mod data;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::DomMatrix;
-use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, MouseEvent, Window};
+use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, PointerEvent, Window};
 
 const CANVAS_WIDTH: u32 = 800;
 const CANVAS_HEIGHT: u32 = 800;
@@ -79,24 +79,22 @@ pub fn main() -> Result<(), JsValue> {
 
     {
         let control_data = control_data.clone();
-        let closure = Closure::<dyn FnMut(_)>::new(move |event: MouseEvent| {
+        let closure = Closure::<dyn FnMut(_)>::new(move |event: PointerEvent| {
             let mut control_data = control_data.borrow_mut();
-            if event.button() == 0 {
-                control_data.pressed = true;
-                control_data.position = Position {
-                    x: event.offset_x() as f64,
-                    y: event.offset_y() as f64,
-                };
-                control_data.position_prev = control_data.position.clone();
-            }
+            control_data.pressed = true;
+            control_data.position = Position {
+                x: event.offset_x() as f64,
+                y: event.offset_y() as f64,
+            };
+            control_data.position_prev = control_data.position.clone();
         });
-        canvas.add_event_listener_with_callback("mousedown", closure.as_ref().unchecked_ref())?;
+        canvas.add_event_listener_with_callback("pointerdown", closure.as_ref().unchecked_ref())?;
         closure.forget();
     }
 
     {
         let control_data = control_data.clone();
-        let closure = Closure::<dyn FnMut(_)>::new(move |event: MouseEvent| {
+        let closure = Closure::<dyn FnMut(_)>::new(move |event: PointerEvent| {
             let mut control_data = control_data.borrow_mut();
             if control_data.pressed {
                 control_data.position = Position {
@@ -105,23 +103,21 @@ pub fn main() -> Result<(), JsValue> {
                 };
             }
         });
-        canvas.add_event_listener_with_callback("mousemove", closure.as_ref().unchecked_ref())?;
+        canvas.add_event_listener_with_callback("pointermove", closure.as_ref().unchecked_ref())?;
         closure.forget();
     }
 
     {
         let control_data = control_data.clone();
-        let closure = Closure::<dyn FnMut(_)>::new(move |event: MouseEvent| {
+        let closure = Closure::<dyn FnMut(_)>::new(move |event: PointerEvent| {
             let mut control_data = control_data.borrow_mut();
-            if control_data.pressed {
-                control_data.position = Position {
-                    x: event.offset_x() as f64,
-                    y: event.offset_y() as f64,
-                };
-            }
+            control_data.position = Position {
+                x: event.offset_x() as f64,
+                y: event.offset_y() as f64,
+            };
             control_data.pressed = false;
         });
-        document.add_event_listener_with_callback("mouseup", closure.as_ref().unchecked_ref())?;
+        document.add_event_listener_with_callback("pointerup", closure.as_ref().unchecked_ref())?;
         closure.forget();
     }
 
