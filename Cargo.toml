@@ -1,0 +1,17 @@
+[package]
+name = "wasm-globe"
+version = "0.1.1"
+authors = ["Chris Snape-Jenkinson"]
+edition = "2021"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+js-sys = "0.3"
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features=["CanvasRenderingContext2d", "Document", "DomMatrix", "Element", "HtmlCanvasElement", "ImageData", "MouseEvent", "Window"] }
+
+[build-dependencies]
+shapefile = "0.3"
