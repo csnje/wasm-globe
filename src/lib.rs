@@ -3,9 +3,7 @@
 // The data module is code generated during the build.
 mod data;
 
-use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
-use web_sys::{CanvasRenderingContext2d, DomMatrix, HtmlCanvasElement, PointerEvent, Window};
+use wasm_bindgen::{prelude::*, JsCast};
 
 const CANVAS_WIDTH: u32 = 800;
 const CANVAS_HEIGHT: u32 = 800;
@@ -30,7 +28,7 @@ struct ControlData {
     rotation: f64,
 }
 
-fn window() -> Window {
+fn window() -> web_sys::Window {
     web_sys::window().expect("should have window")
 }
 
@@ -46,7 +44,7 @@ pub fn main() -> Result<(), JsValue> {
 
     let canvas = document
         .create_element("canvas")?
-        .dyn_into::<HtmlCanvasElement>()?;
+        .dyn_into::<web_sys::HtmlCanvasElement>()?;
     canvas.set_width(CANVAS_WIDTH);
     canvas.set_height(CANVAS_HEIGHT);
     canvas.style().set_property("touch-action", "pan-y")?; // Over browser (i.e. "auto") touch behaviour
@@ -55,7 +53,7 @@ pub fn main() -> Result<(), JsValue> {
     let context = canvas
         .get_context("2d")?
         .expect("should have 2d context")
-        .dyn_into::<CanvasRenderingContext2d>()?;
+        .dyn_into::<web_sys::CanvasRenderingContext2d>()?;
 
     // Position calculations for plotting, etc... are performed for a unit sphere
     // centred at the origin; values are scaled and translated to fit on the canvas
@@ -79,7 +77,7 @@ pub fn main() -> Result<(), JsValue> {
 
     {
         let control_data = control_data.clone();
-        let closure = Closure::<dyn FnMut(_)>::new(move |event: PointerEvent| {
+        let closure = Closure::<dyn FnMut(_)>::new(move |event: web_sys::PointerEvent| {
             let mut control_data = control_data.borrow_mut();
             control_data.pressed = true;
             control_data.position = Position {
@@ -94,7 +92,7 @@ pub fn main() -> Result<(), JsValue> {
 
     {
         let control_data = control_data.clone();
-        let closure = Closure::<dyn FnMut(_)>::new(move |event: PointerEvent| {
+        let closure = Closure::<dyn FnMut(_)>::new(move |event: web_sys::PointerEvent| {
             let mut control_data = control_data.borrow_mut();
             if control_data.pressed {
                 control_data.position = Position {
@@ -110,7 +108,7 @@ pub fn main() -> Result<(), JsValue> {
 
     {
         let control_data = control_data.clone();
-        let closure = Closure::<dyn FnMut(_)>::new(move |event: PointerEvent| {
+        let closure = Closure::<dyn FnMut(_)>::new(move |event: web_sys::PointerEvent| {
             let mut control_data = control_data.borrow_mut();
             control_data.pressed = false;
             control_data.position = Position {
@@ -124,7 +122,7 @@ pub fn main() -> Result<(), JsValue> {
 
     // Tranform from canvas coordinates to unit circle
     // coordinates by reversing the context transform
-    let canvas_to_unit_coords = |x: f64, y: f64, reverse_transform: &DomMatrix| {
+    let canvas_to_unit_coords = |x: f64, y: f64, reverse_transform: &web_sys::DomMatrix| {
         (
             (x - reverse_transform.e()) / reverse_transform.a(),
             (y - reverse_transform.f()) / reverse_transform.d(),
@@ -172,7 +170,7 @@ pub fn main() -> Result<(), JsValue> {
 }
 
 /// Draw data onto the canvas.
-fn draw(context: &CanvasRenderingContext2d, rotation: f64) -> Result<(), JsValue> {
+fn draw(context: &web_sys::CanvasRenderingContext2d, rotation: f64) -> Result<(), JsValue> {
     context.clear_rect(-1.0, -1.0, 2.0, 2.0);
 
     context.set_fill_style(&JsValue::from_str(SPHERE_FILL_STYLE));

@@ -17,6 +17,10 @@ Install [wasm-pack](https://github.com/rustwasm/wasm-pack).
 ```bash
 wasm-pack build --target web
 ```
+or optimised for release
+```bash
+wasm-pack build --target web --release
+```
 
 ## Serve and run
 
