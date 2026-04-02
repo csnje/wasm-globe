@@ -3,7 +3,7 @@
 // The data module is code generated during the build.
 mod data;
 
-use wasm_bindgen::{prelude::*, JsCast};
+use wasm_bindgen::{JsCast, prelude::*};
 
 const CANVAS_WIDTH: u32 = 800;
 const CANVAS_HEIGHT: u32 = 800;
@@ -178,7 +178,7 @@ fn draw(context: &web_sys::CanvasRenderingContext2d, rotation: f64) -> Result<()
     context.arc(0.0, 0.0, 1.0, 0.0, std::f64::consts::TAU)?;
     context.fill();
 
-    for polyline in data::COASTLINE_POINTS {
+    for polyline in data::COASTLINE {
         let mut prev_point = None;
         for point in *polyline {
             let (lon, lat) = point;
