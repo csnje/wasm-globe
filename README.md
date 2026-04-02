@@ -2,36 +2,40 @@
 
 ## About
 
-An implementation of a rotating globe in **Rust** **WebAssembly**.
+An implementation of a rotating globe in [**Rust**][1] [**WebAssembly**][2].
 
 ![Image of globe](./images/output.png)
 
-Data sourced from [Natural Earth](https://www.naturalearthdata.com/) is transformed into **Rust** code during compilation using a [build script](./build.rs).
+Data sourced from [Natural Earth][3] is transformed into code using a
+[build script](./build.rs).
 
 ## Prerequisites
 
-Install [**Rust**](https://www.rust-lang.org/) and [**wasm-pack**](https://github.com/rustwasm/wasm-pack).
+```sh
+cargo install wasm-bindgen-cli
+```
 
 ## Build
 
-```bash
-wasm-pack build --target web
-```
-or optimised for release
-```bash
-wasm-pack build --target web --release
+```sh
+cargo build --target=wasm32-unknown-unknown --release
+wasm-bindgen --target web --out-dir ./pkg ./target/wasm32-unknown-unknown/release/wasm_globe.wasm
 ```
 
 ## Run
 
 Some options to serve the application include:
-```bash
+```sh
 # Python 3.x
 python3 -m http.server
 # Python 2.x
-python -m SimpleHTTPServer
+python2 -m SimpleHTTPServer
 # JDK 18 or later
 jwebserver
 ```
 
 Access via a web browser at [http://localhost:8000](http://localhost:8000).
+
+[1]: https://rust-lang.org/
+[2]: https://webassembly.org/
+[3]: https://www.naturalearthdata.com/

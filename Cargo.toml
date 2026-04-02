@@ -2,20 +2,30 @@
 name = "wasm-globe"
 version = "0.1.3"
 authors = ["Chris Snape-Jenkinson"]
-edition = "2021"
+edition = "2024"
 license = "MIT"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-js-sys = "0.3"
 wasm-bindgen = "0.2"
-web-sys = { version = "0.3", features=["CanvasRenderingContext2d", "CssStyleDeclaration", "Document", "DomMatrix", "Element", "HtmlCanvasElement", "ImageData", "PointerEvent", "Window"] }
+web-sys = { version = "0.3", features = [
+    "CanvasRenderingContext2d",
+    "CssStyleDeclaration",
+    "Document",
+    "DomMatrix",
+    "Element",
+    "HtmlCanvasElement",
+    "ImageData",
+    "PointerEvent",
+    "Window",
+] }
 
 [build-dependencies]
-shapefile = "0.3"
+shapefile = "0.8"
 
 [profile.release]
 lto = true
-opt-level = 's'
+# strip = true
+strip = "debuginfo"
