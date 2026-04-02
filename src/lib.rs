@@ -1,20 +1,20 @@
-// A WebAssembly globe renderer.
+mod data; // generated during build
 
-// The data module is code generated during the build.
-mod data;
-
-use wasm_bindgen::{JsCast, prelude::*};
+use wasm_bindgen::prelude::*;
 
 const CANVAS_WIDTH: u32 = 800;
 const CANVAS_HEIGHT: u32 = 800;
 
-const SPHERE_FILL_STYLE: &str = "rgba(159, 159, 255, 1.0)";
-const COAST_FRONT_STROKE_STYLE: &str = "rgba(0, 0, 127, 1.0)";
-const COAST_BACK_STROKE_STYLE: &str = "rgba(0, 0, 0, 0.25)";
-const COAST_FRONT_LINE_WIDTH: f64 = 0.005;
-const COAST_BACK_LINE_WIDTH: f64 = 0.0025;
+const BACKGROUND: &str = "black";
+const SPHERE_FILL_STYLE: &str = "rgba(0, 0, 255, 0.25)";
+const COASTLINE_FRONT_STROKE_STYLE: &str = "rgb(63, 127, 63)";
+const COASTLINE_BACK_STROKE_STYLE: &str = "rgba(63, 127, 63, 0.5)";
+const COASTLINE_FRONT_LINE_WIDTH: f64 = 0.005;
+const COASTLINE_BACK_LINE_WIDTH: f64 = 0.0025;
 
-#[derive(Clone, Debug, Default, PartialEq)]
+const INITIAL_LONGITUDE: f64 = 103.0;
+
+#[derive(Debug, Default, Clone, PartialEq)]
 struct Position {
     x: f64,
     y: f64,
@@ -24,8 +24,7 @@ struct Position {
 struct ControlData {
     pressed: bool,
     position: Position,
-    position_prev: Position,
-    rotation: f64,
+    prev_position: Position,
 }
 
 fn window() -> web_sys::Window {
@@ -41,40 +40,22 @@ fn request_animation_frame(f: &Closure<dyn FnMut()>) {
 #[wasm_bindgen(start)]
 pub fn main() -> Result<(), JsValue> {
     let document = window().document().expect("should have document");
+    let body = document.body().expect("should have body");
 
+    body.style().set_property("background", BACKGROUND)?;
+
+    // create canvas
     let canvas = document
         .create_element("canvas")?
         .dyn_into::<web_sys::HtmlCanvasElement>()?;
     canvas.set_width(CANVAS_WIDTH);
     canvas.set_height(CANVAS_HEIGHT);
-    canvas.style().set_property("touch-action", "pan-y")?; // Over browser (i.e. "auto") touch behaviour
-    document.body().unwrap().append_child(&canvas)?;
-
-    let context = canvas
-        .get_context("2d")?
-        .expect("should have 2d context")
-        .dyn_into::<web_sys::CanvasRenderingContext2d>()?;
-
-    // Position calculations for plotting, etc... are performed for a unit sphere
-    // centred at the origin; values are scaled and translated to fit on the canvas
-    context.set_transform(
-        // horizontal scale
-        std::cmp::min(CANVAS_WIDTH, CANVAS_HEIGHT) as f64 / 2.0,
-        0.0,
-        0.0,
-        // vertical scale, flipped
-        std::cmp::min(CANVAS_WIDTH, CANVAS_HEIGHT) as f64 / -2.0,
-        // horizontal translation
-        std::cmp::min(CANVAS_WIDTH, CANVAS_HEIGHT) as f64 / 2.0,
-        // vertical translation
-        std::cmp::min(CANVAS_WIDTH, CANVAS_HEIGHT) as f64 / 2.0,
-    )?;
-    let context_transform = context.get_transform()?;
-    context.set_line_join("round");
+    canvas.style().set_property("touch-action", "pan-y")?; // over browser (i.e. "auto") touch behaviour
+    body.append_child(&canvas)?;
 
     let control_data = std::rc::Rc::new(std::cell::RefCell::new(ControlData::default()));
-    draw(&context, control_data.borrow().rotation)?;
 
+    // handle pointer down
     {
         let control_data = control_data.clone();
         let closure = Closure::<dyn FnMut(_)>::new(move |event: web_sys::PointerEvent| {
@@ -84,12 +65,28 @@ pub fn main() -> Result<(), JsValue> {
                 x: event.offset_x() as f64,
                 y: event.offset_y() as f64,
             };
-            control_data.position_prev = control_data.position.clone();
+            control_data.prev_position = control_data.position.clone();
         });
         canvas.add_event_listener_with_callback("pointerdown", closure.as_ref().unchecked_ref())?;
         closure.forget();
     }
 
+    // handle pointer up
+    {
+        let control_data = control_data.clone();
+        let closure = Closure::<dyn FnMut(_)>::new(move |event: web_sys::PointerEvent| {
+            let mut control_data = control_data.borrow_mut();
+            control_data.pressed = false;
+            control_data.position = Position {
+                x: event.offset_x() as f64,
+                y: event.offset_y() as f64,
+            };
+        });
+        document.add_event_listener_with_callback("pointerup", closure.as_ref().unchecked_ref())?;
+        closure.forget();
+    }
+
+    // handle pointer move
     {
         let control_data = control_data.clone();
         let closure = Closure::<dyn FnMut(_)>::new(move |event: web_sys::PointerEvent| {
@@ -106,59 +103,62 @@ pub fn main() -> Result<(), JsValue> {
         closure.forget();
     }
 
+    let context = canvas
+        .get_context("2d")?
+        .expect("should have 2d context")
+        .dyn_into::<web_sys::CanvasRenderingContext2d>()?;
+
+    // set canvas context transform to fit unit circle to canvas
     {
-        let control_data = control_data.clone();
-        let closure = Closure::<dyn FnMut(_)>::new(move |event: web_sys::PointerEvent| {
-            let mut control_data = control_data.borrow_mut();
-            control_data.pressed = false;
-            control_data.position = Position {
-                x: event.offset_x() as f64,
-                y: event.offset_y() as f64,
-            };
-        });
-        document.add_event_listener_with_callback("pointerup", closure.as_ref().unchecked_ref())?;
-        closure.forget();
+        let size = CANVAS_WIDTH.min(CANVAS_HEIGHT) as f64;
+        context.set_transform(
+            size / 2.0, // horizontal scaling
+            0.0,
+            0.0,
+            -size / 2.0, // vertical scaling; upward increasing
+            size / 2.0,  // horizontal translation
+            size / 2.0,  // vertical translation
+        )?;
     }
 
-    // Tranform from canvas coordinates to unit circle
-    // coordinates by reversing the context transform
-    let canvas_to_unit_coords = |x: f64, y: f64, reverse_transform: &web_sys::DomMatrix| {
+    // closure to convert canvas coordinates to unit circle coordinates
+    let transform = context.get_transform()?;
+    let canvas_to_unit_coords = move |x: f64, y: f64| {
+        let point = web_sys::DomPointInit::new();
+        point.set_x(x);
+        point.set_y(y);
+        let point = transform.inverse().transform_point_with_point(&point);
         (
-            (x - reverse_transform.e()) / reverse_transform.a(),
-            (y - reverse_transform.f()) / reverse_transform.d(),
+            (1.0 - point.x() * point.x() - point.y() * point.y()).sqrt(),
+            point.x(),
+            point.y(),
         )
     };
 
-    // Calculate the (positive) third coordinate value on
-    // a unit sphere given the other two coordinate values
-    let third_coord_val = |first: f64, second: f64| (1.0 - first * first - second * second).sqrt();
+    context.set_line_join("round");
+
+    let mut rotation = -INITIAL_LONGITUDE.rem_euclid(360.0);
+    draw(&context, rotation)?;
 
     let f = std::rc::Rc::new(std::cell::RefCell::new(None));
     let g = f.clone();
     *g.borrow_mut() = Some(Closure::new(move || {
         let mut control_data = control_data.borrow_mut();
-        if control_data.position != control_data.position_prev {
-            let (y, z) = canvas_to_unit_coords(
-                control_data.position.x,
-                control_data.position.y,
-                &context_transform,
-            );
-            let x = third_coord_val(y, z);
+        if control_data.position != control_data.prev_position {
+            let (x, y, z) = canvas_to_unit_coords(control_data.position.x, control_data.position.y);
             if !x.is_nan() {
-                let (y_prev, z_prev) = canvas_to_unit_coords(
-                    control_data.position_prev.x,
-                    control_data.position_prev.y,
-                    &context_transform,
+                let (prev_x, prev_y, prev_z) = canvas_to_unit_coords(
+                    control_data.prev_position.x,
+                    control_data.prev_position.y,
                 );
-                let x_prev = third_coord_val(y_prev, z_prev);
-                if !x_prev.is_nan() {
-                    let (_, phi) = cartesian_to_unit_spherical(x, y, z);
-                    let (_, phi_prev) = cartesian_to_unit_spherical(x_prev, y_prev, z_prev);
+                if !prev_x.is_nan() {
+                    let (azi, _) = cartesian_to_unit_spherical(x, y, z);
+                    let (azi_prev, _) = cartesian_to_unit_spherical(prev_x, prev_y, prev_z);
 
-                    control_data.position_prev = control_data.position.clone();
-                    control_data.rotation += phi - phi_prev;
+                    control_data.prev_position = control_data.position.clone();
+                    rotation += (azi - azi_prev).rem_euclid(360.0);
 
-                    draw(&context, control_data.rotation).unwrap();
+                    draw(&context, rotation).unwrap();
                 }
             }
         }
@@ -169,34 +169,34 @@ pub fn main() -> Result<(), JsValue> {
     Ok(())
 }
 
-/// Draw data onto the canvas.
 fn draw(context: &web_sys::CanvasRenderingContext2d, rotation: f64) -> Result<(), JsValue> {
     context.clear_rect(-1.0, -1.0, 2.0, 2.0);
 
-    context.set_fill_style(&JsValue::from_str(SPHERE_FILL_STYLE));
+    // sphere
+    context.set_fill_style_str(SPHERE_FILL_STYLE);
     context.begin_path();
     context.arc(0.0, 0.0, 1.0, 0.0, std::f64::consts::TAU)?;
     context.fill();
 
-    for polyline in data::COASTLINE {
-        let mut prev_point = None;
-        for point in *polyline {
-            let (lon, lat) = point;
-            let (x, y, z) = unit_spherical_to_cartesian(90.0 - lat, lon + rotation);
-            if let Some((x_prev, y_prev, z_prev)) = prev_point {
-                if x_prev < 0.0 || x < 0.0 {
-                    context.set_line_width(COAST_BACK_LINE_WIDTH);
-                    context.set_stroke_style(&JsValue::from_str(COAST_BACK_STROKE_STYLE));
+    // coastline
+    for &polyline in data::COASTLINE {
+        let mut prev = None;
+        for &(lon, lat) in polyline {
+            let (x, y, z) = ll_to_unit_cartesian(lat, lon, rotation);
+            if let Some((prev_x, prev_y, prev_z)) = prev {
+                if prev_x < 0.0 || x < 0.0 {
+                    context.set_line_width(COASTLINE_BACK_LINE_WIDTH);
+                    context.set_stroke_style_str(COASTLINE_BACK_STROKE_STYLE);
                 } else {
-                    context.set_line_width(COAST_FRONT_LINE_WIDTH);
-                    context.set_stroke_style(&JsValue::from_str(COAST_FRONT_STROKE_STYLE));
+                    context.set_line_width(COASTLINE_FRONT_LINE_WIDTH);
+                    context.set_stroke_style_str(COASTLINE_FRONT_STROKE_STYLE);
                 }
                 context.begin_path();
-                context.move_to(y_prev, z_prev);
+                context.move_to(prev_y, prev_z);
                 context.line_to(y, z);
                 context.stroke()
             }
-            prev_point = Some((x, y, z));
+            prev = Some((x, y, z));
         }
         context.stroke();
     }
@@ -204,17 +204,18 @@ fn draw(context: &web_sys::CanvasRenderingContext2d, rotation: f64) -> Result<()
     Ok(())
 }
 
-/// Convert unit radius spherical coordinates (degrees) to Cartesian coordinates.
-fn unit_spherical_to_cartesian(theta: f64, phi: f64) -> (f64, f64, f64) {
-    let (sin_theta, cos_theta) = theta.to_radians().sin_cos();
-    let (sin_phi, cos_phi) = phi.to_radians().sin_cos();
-    (sin_theta * cos_phi, sin_theta * sin_phi, cos_theta)
+/// Convert latitude, longitude and rotation in degrees to Cartesian coordinates on unit sphere.
+fn ll_to_unit_cartesian(lat: f64, lon: f64, rotation: f64) -> (f64, f64, f64) {
+    let (azimuth, polar) = (lon + rotation, 90.0 - lat);
+    let (sin_azimuth, cos_azimuth) = azimuth.to_radians().sin_cos();
+    let (sin_polar, cos_polar) = polar.to_radians().sin_cos();
+    (cos_azimuth * sin_polar, sin_azimuth * sin_polar, cos_polar)
 }
 
-/// Convert Cartesian coordinates to unit radius spherical coordinates (degrees).
+/// Convert Cartesian coordinates to spherical coordinate azimuth and polar angles (degrees).
 fn cartesian_to_unit_spherical(x: f64, y: f64, z: f64) -> (f64, f64) {
     (
-        z.acos().to_degrees(),
         y.signum() * (x / (x * x + y * y).sqrt()).acos().to_degrees(),
+        z.acos().to_degrees(),
     )
 }
